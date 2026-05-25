@@ -390,7 +390,8 @@ with tab2:
     st.subheader("📊 물건 종합 분석")
 
     row = st.session_state.selected_row
-
+    if row:
+        st.json(row)  # 디버그: 키 이름 확인
     # 직접 입력도 가능
     manual_addr = st.text_input("주소 직접 입력 (검색 탭에서 선택하거나 여기에 입력)", value="")
 
