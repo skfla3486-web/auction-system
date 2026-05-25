@@ -641,6 +641,7 @@ with tab3:
                     if st.button("📊 종합분석", key=f"analyze_{i}"):
                         st.session_state.selected_row = item.get("raw", {})
                         st.info("📊 종합분석 탭을 확인하세요.")
+                        st.json(row)  # 디버그: 행 데이터 확인용
                 with mc2:
                     if st.button("🗑️ 삭제", key=f"delete_{i}"):
                         st.session_state.watchlist.pop(i)
