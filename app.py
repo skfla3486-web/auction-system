@@ -323,11 +323,11 @@ with tab1:
         # 보기 좋은 컬럼만 표시
         display_cols = []
         col_map = {
-            "userCsNo": "사건번호", "cortOfcNm": "법원",
-            "rprsAdongNm": "소재지", "mvprpRletDvsNm": "물건종류",
-            "aeeEvlAmt": "감정가", "lwsDspslPrc": "최저가",
-            "lwsDspslPrcRate": "최저가율(%)", "flbdNcnt": "유찰",
-            "dspslDxdyYmd": "매각기일", "bidMthdNm": "입찰방법"
+            "srnSaNo": "사건번호", "jiwonNm": "법원",
+            "printSt": "소재지", "dspslUsgNm": "물건종류",
+            "gamevalAmt": "감정가", "minmaePrice": "최저가",
+            "yuchalCnt": "유찰", "maeGiil": "매각기일",
+            "ipchalGbncd": "입찰방법"
         }
         for k, v in col_map.items():
             if k in df.columns:
@@ -363,12 +363,14 @@ with tab1:
 
             # 관심등록 버튼
             if st.button("⭐ 관심물건 등록"):
-                cs = _pick(row, "userCsNo", "srnSaNo", "csNo")
-                addr = _pick(row, "rprsAdongNm")
-                appr = row.get("aeeEvlAmt", 0)
-                low = row.get("lwsDspslPrc", 0)
-                fail = row.get("flbdNcnt", 0)
-                sale_date = _pick(row, "dspslDxdyYmd")
+            cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
+                court = _pick(row, "jiwonNm", "cortOfcNm")
+                appr = int(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)
+                low = int(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)
+                fail = int(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)
+                sale_date = _pick(row, "maeGiil", "dspslDxdyYmd")
+                rate = row.get("notifyMinmaePriceRate1") or row.get("lwsDspslPrcRate") or 0
+                deposit = int(low * 0.1) if low else 0
 
                 item = {
                     "caseNo": cs, "address": addr,
@@ -400,7 +402,7 @@ with tab2:
         if manual_addr:
             address = manual_addr
         else:
-            address = _pick(row, "rprsAdongNm", "adongNm")
+            address = _pick(row, "printSt", "rprsAdongNm", "adongNm")
 
         if not address:
             st.warning("주소를 찾을 수 없습니다.")
