@@ -364,13 +364,20 @@ with tab1:
             # 관심등록 버튼
             if st.button("⭐ 관심물건 등록"):
                 cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
-                court = _pick(row, "jiwonNm", "cortOfcNm")
-                appr = int(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)
-                low = int(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)
-                fail = int(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)
+                addr = _pick(row, "printSt", "rprsAdongNm")
+                try:
+                    appr = int(float(str(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)))
+                except:
+                    appr = 0
+                try:
+                    low = int(float(str(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)))
+                except:
+                    low = 0
+                try:
+                    fail = int(float(str(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)))
+                except:
+                    fail = 0
                 sale_date = _pick(row, "maeGiil", "dspslDxdyYmd")
-                rate = row.get("notifyMinmaePriceRate1") or row.get("lwsDspslPrcRate") or 0
-                deposit = int(low * 0.1) if low else 0
 
                 item = {
                     "caseNo": cs, "address": addr,
@@ -393,7 +400,7 @@ with tab2:
 
     row = st.session_state.selected_row
     if row:
-        st.json(row)  # 디버그: 키 이름 확인
+
     # 직접 입력도 가능
     manual_addr = st.text_input("주소 직접 입력 (검색 탭에서 선택하거나 여기에 입력)", value="")
 
@@ -410,15 +417,26 @@ with tab2:
             # ── 경매 정보 표시 ──
             if row:
                 st.markdown("### 📋 경매 정보")
-                cs = _pick(row, "userCsNo", "srnSaNo", "csNo")
-                court = _pick(row, "cortOfcNm")
-                appr = row.get("aeeEvlAmt", 0)
-                low = row.get("lwsDspslPrc", 0)
-                fail = row.get("flbdNcnt", 0)
-                sale_date = _pick(row, "dspslDxdyYmd")
-                rate = row.get("lwsDspslPrcRate", 0)
+                cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
+                court = _pick(row, "jiwonNm", "cortOfcNm")
+                try:
+                    appr = int(float(str(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)))
+                except:
+                    appr = 0
+                try:
+                    low = int(float(str(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)))
+                except:
+                    low = 0
+                try:
+                    fail = int(float(str(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)))
+                except:
+                    fail = 0
+                sale_date = _pick(row, "maeGiil", "dspslDxdyYmd")
+                try:
+                    rate = int(float(str(row.get("notifyMinmaePriceRate1") or row.get("lwsDspslPrcRate") or 0)))
+                except:
+                    rate = 0
                 deposit = int(low * 0.1) if low else 0
-
                 ac1, ac2, ac3, ac4 = st.columns(4)
                 ac1.metric("감정가", fmt_price(appr))
                 ac2.metric("최저가", fmt_price(low))
