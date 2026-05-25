@@ -363,7 +363,7 @@ with tab1:
 
             # 관심등록 버튼
             if st.button("⭐ 관심물건 등록"):
-            cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
+                cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
                 court = _pick(row, "jiwonNm", "cortOfcNm")
                 appr = int(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)
                 low = int(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)
