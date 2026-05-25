@@ -3,7 +3,6 @@ import pandas as pd
 import time
 import streamlit as st
 import io
-import json
 from datetime import date, timedelta
 
 st.set_page_config(page_title="경매 관리 시스템", page_icon="🏛️", layout="wide")
@@ -30,11 +29,17 @@ HEADERS = {
 HEADERS_SEARCH = {**HEADERS, "Submissionid": "mf_wfm_mainFrame_sbm_selectGdsDtlSrch"}
 HEADERS_DETAIL = {**HEADERS, "Submissionid": "mf_wfm_mainFrame_sbm_selectAuctnCsSrchRslt"}
 
+OBJ_TYPES = {"전체": "", "아파트": "00031R", "토지": "00030R", "상가": "00033R"}
+
+
 # ===== 유틸 =====
 def fmt_price(v):
-    if not v or v == 0:
+    try:
+        n = int(float(str(v)))
+    except:
         return "-"
-    n = int(v)
+    if n <= 0:
+        return "-"
     eok = n // 100000000
     man = (n % 100000000) // 10000
     r = ""
@@ -44,18 +49,28 @@ def fmt_price(v):
         r += f"{man:,}만"
     return (r.strip() + "원") if r else f"{n:,}원"
 
+
 def fmt_date(s):
-    if not s or len(str(s)) != 8:
-        return "-"
-    s = str(s)
+    s = str(s).strip()
+    if len(s) != 8 or not s.isdigit():
+        return s or "-"
     return f"{s[:4]}.{s[4:6]}.{s[6:]}"
+
+
+def safe_int(v):
+    try:
+        return int(float(str(v)))
+    except:
+        return 0
+
 
 def _pick(row, *keys):
     for k in keys:
         v = row.get(k)
         if v not in (None, ""):
-            return str(v)
+            return str(v).strip()
     return ""
+
 
 # ===== 지역 API =====
 @st.cache_data
@@ -64,19 +79,24 @@ def get_sd_list():
     items = res.json().get("data", {}).get("adongSdLst", [])
     return {i["name"]: i["code"] for i in items}
 
+
 @st.cache_data
 def get_sgg_list(sd_cd):
-    if not sd_cd: return {}
+    if not sd_cd:
+        return {}
     res = requests.post(URL_SGG, headers=HEADERS, json={"pbancMidYn": "Y", "srchDvsCd": "B", "pbancDvsCd": "A", "adongSdCd": sd_cd})
     items = res.json().get("data", {}).get("adongSggLst", [])
     return {i["name"]: i["code"] for i in items}
 
+
 @st.cache_data
 def get_emd_list(sd_cd, sgg_cd):
-    if not sd_cd or not sgg_cd: return {}
+    if not sd_cd or not sgg_cd:
+        return {}
     res = requests.post(URL_EMD, headers=HEADERS, json={"pbancMidYn": "Y", "srchDvsCd": "B", "pbancDvsCd": "A", "adongSdCd": sd_cd, "adongSggCd": sgg_cd})
     items = res.json().get("data", {}).get("adongEmdLst", [])
     return {i["name"]: i["code"] for i in items}
+
 
 @st.cache_data
 def get_lcl_list():
@@ -85,21 +105,26 @@ def get_lcl_list():
     items = data.get("usgLclLst") or data.get("lclLst") or []
     return {i["name"]: i["code"] for i in items}
 
+
 @st.cache_data
 def get_mcl_list(lcl_cd):
-    if not lcl_cd: return {}
+    if not lcl_cd:
+        return {}
     res = requests.post(URL_MCL, headers=HEADERS, json={"code": lcl_cd})
     data = res.json().get("data", {})
     items = data.get("usgMclLst") or data.get("mclLst") or []
     return {i["name"]: i["code"] for i in items}
 
+
 @st.cache_data
 def get_scl_list(mcl_cd):
-    if not mcl_cd: return {}
+    if not mcl_cd:
+        return {}
     res = requests.post(URL_SCL, headers=HEADERS, json={"code": mcl_cd})
     data = res.json().get("data", {})
     items = data.get("usgSclLst") or data.get("sclLst") or []
     return {i["name"]: i["code"] for i in items}
+
 
 # ===== 검색 API =====
 def fetch_page(page_no, sd_cd, sgg_cd, emd_cd, min_price, max_price, obj_type, cs_no, lcl_cd, mcl_cd, scl_cd, date_from, date_to):
@@ -134,48 +159,15 @@ def fetch_page(page_no, sd_cd, sgg_cd, emd_cd, min_price, max_price, obj_type, c
     total = (inner.get("dma_pageInfo") or {}).get("totalCnt") or 0
     return rows, int(total)
 
-@st.cache_data
-def fetch_detail(cs_no, cort_ofc_cd, dspsl_gds_seq):
-    payload = {
-        "dma_srchGdsDtlSrch": {
-            "cortOfcCd": cort_ofc_cd, "csNo": cs_no,
-            "dspslGdsSeq": str(dspsl_gds_seq) if dspsl_gds_seq else "1",
-            "pgmId": "PGJ151F01",
-            "srchInfo": {
-                "rletDspslSpcCondCd": "", "bidDvsCd": "", "mvprpRletDvsCd": "",
-                "cortAuctnSrchCondCd": "0004601", "cortOfcCd": cort_ofc_cd, "cortStDvs": "2",
-                "csNo": "", "pgmId": "PGJ151F01", "menuNm": "물건상세검색",
-                "aeeEvlAmtMax": "", "aeeEvlAmtMin": "",
-                "bidBgngYmd": "", "bidEndYmd": "",
-                "dspslDxdyYmd": "", "dspslPlcNm": "",
-                "execrOfcDvsCd": "", "flbdNcntMax": "", "flbdNcntMin": "",
-                "fothDspslHm": "", "fstDspslHm": "", "scndDspslHm": "", "thrdDspslHm": "",
-                "gdsVendNm": "", "jdbnCd": "", "lafjOrderBy": "",
-                "lwsDspslPrcMax": "", "lwsDspslPrcMin": "",
-                "lwsDspslPrcRateMax": "", "lwsDspslPrcRateMin": "",
-                "mvprpArtclKndCd": "", "mvprpArtclNm": "", "mvprpAtchmPlcTypCd": "",
-                "rprsAdongSdCd": "", "rprsAdongSggCd": "", "rprsAdongEmdCd": "",
-                "mvprpDspslPlcAdongSdCd": "", "mvprpDspslPlcAdongSggCd": "", "mvprpDspslPlcAdongEmdCd": "",
-                "rdDspslPlcAdongSdCd": "", "rdDspslPlcAdongSggCd": "", "rdDspslPlcAdongEmdCd": "",
-                "rdnmSdCd": "", "rdnmSggCd": "", "rdnmNo": "",
-                "lclDspslGdsLstUsgCd": "", "mclDspslGdsLstUsgCd": "", "sclDspslGdsLstUsgCd": "",
-                "notifyLoc": "on", "objctArDtsMax": "", "objctArDtsMin": "",
-                "statNum": 1, "sideDvsCd": "", "grbxTypCd": "", "fuelKndCd": "",
-                "carMdyrMax": "", "carMdyrMin": "", "carMdlNm": "",
-                "cortAuctnMbrsId": "", "srchRowIndex": 0,
-            }
-        }
-    }
-    res = requests.post(URL_DETAIL, headers=HEADERS_DETAIL, json=payload)
-    return res.json().get("data") or {}
 
-# ===== Vercel API 호출 (토지/건물/실거래) =====
+# ===== Vercel API 호출 =====
 def vercel_geocode(address):
     try:
         r = requests.get(f"{VERCEL_BASE}/geocode?address={requests.utils.quote(address)}", timeout=10)
         return r.json()
     except:
         return {}
+
 
 def vercel_land(pnu):
     try:
@@ -191,6 +183,7 @@ def vercel_land(pnu):
     except:
         return {}
 
+
 def vercel_building(pnu):
     try:
         r = requests.get(f"{VERCEL_BASE}/building?pnu={pnu}", timeout=10)
@@ -205,6 +198,7 @@ def vercel_building(pnu):
     except:
         return []
 
+
 def vercel_realtrade(lawd_cd):
     try:
         now = date.today()
@@ -215,6 +209,7 @@ def vercel_realtrade(lawd_cd):
     except:
         return []
 
+
 # ===== 세션 초기화 =====
 if "results" not in st.session_state:
     st.session_state.results = None
@@ -223,11 +218,12 @@ if "selected_row" not in st.session_state:
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
 
-# ===== 메인 UI =====
+# ===== 메인 =====
 st.markdown("## 🏛️ 경매 전문 관리 시스템")
 st.caption("새로공인중개사사무소 · 최나림")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 검색", "📊 종합분석", "⭐ 관심물건", "👥 의뢰인", "📅 일정"])
+
 
 # ═══════════════════════════════════════════
 # 탭 1: 검색
@@ -264,7 +260,6 @@ with tab1:
         scl_cd = scl_map.get(scl_label, "")
 
     st.subheader("🔍 검색 조건")
-    OBJ_TYPES = {"전체": "", "아파트": "00031R", "토지": "00030R", "상가": "00033R"}
     r3c1, r3c2, r3c3, r3c4, r3c5 = st.columns(5)
     with r3c1:
         obj_label = st.selectbox("물건종류", list(OBJ_TYPES.keys()))
@@ -320,63 +315,44 @@ with tab1:
     if results:
         df = pd.DataFrame(results)
 
-        # 보기 좋은 컬럼만 표시
-        display_cols = []
         col_map = {
             "srnSaNo": "사건번호", "jiwonNm": "법원",
             "printSt": "소재지", "dspslUsgNm": "물건종류",
             "gamevalAmt": "감정가", "minmaePrice": "최저가",
             "yuchalCnt": "유찰", "maeGiil": "매각기일",
-            "ipchalGbncd": "입찰방법"
         }
-        for k, v in col_map.items():
-            if k in df.columns:
-                display_cols.append(k)
 
+        display_cols = [k for k in col_map.keys() if k in df.columns]
         df_display = df[display_cols].copy() if display_cols else df.copy()
         df_display.columns = [col_map.get(c, c) for c in df_display.columns]
 
-        # 금액 포맷
         for col in ["감정가", "최저가"]:
             if col in df_display.columns:
-                df_display[col] = df_display[col].apply(lambda x: fmt_price(x) if x else "-")
-        for col in ["매각기일"]:
-            if col in df_display.columns:
-                df_display[col] = df_display[col].apply(lambda x: fmt_date(x) if x else "-")
+                df_display[col] = df_display[col].apply(lambda x: fmt_price(x))
+        if "매각기일" in df_display.columns:
+            df_display["매각기일"] = df_display["매각기일"].apply(lambda x: fmt_date(x))
 
         st.subheader(f"📋 검색 결과 ({len(df)}건)")
         event = st.dataframe(df_display, use_container_width=True, hide_index=True,
                              on_select="rerun", selection_mode="single-row", key="result_table")
 
-        # 엑셀
         buf = io.BytesIO()
         df.to_excel(buf, index=False)
         buf.seek(0)
         st.download_button("📥 엑셀 다운로드", buf, "경매결과.xlsx")
 
-        # 선택 시 → 종합분석 탭으로
         sel = event.selection.rows if event and event.selection else []
         if sel:
             row = df.iloc[sel[0]].to_dict()
             st.session_state.selected_row = row
             st.info("📊 **종합분석** 탭에서 상세 분석을 확인하세요!")
 
-            # 관심등록 버튼
             if st.button("⭐ 관심물건 등록"):
                 cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
                 addr = _pick(row, "printSt", "rprsAdongNm")
-                try:
-                    appr = int(float(str(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)))
-                except:
-                    appr = 0
-                try:
-                    low = int(float(str(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)))
-                except:
-                    low = 0
-                try:
-                    fail = int(float(str(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)))
-                except:
-                    fail = 0
+                appr = safe_int(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)
+                low = safe_int(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)
+                fail = safe_int(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)
                 sale_date = _pick(row, "maeGiil", "dspslDxdyYmd")
 
                 item = {
@@ -392,6 +368,7 @@ with tab1:
                 else:
                     st.warning("이미 등록된 물건입니다.")
 
+
 # ═══════════════════════════════════════════
 # 탭 2: 종합분석
 # ═══════════════════════════════════════════
@@ -399,44 +376,31 @@ with tab2:
     st.subheader("📊 물건 종합 분석")
 
     row = st.session_state.selected_row
-    if row:
-
-    # 직접 입력도 가능
     manual_addr = st.text_input("주소 직접 입력 (검색 탭에서 선택하거나 여기에 입력)", value="")
 
     if row or manual_addr:
-        # 주소 결정
         if manual_addr:
             address = manual_addr
-        else:
+        elif row:
             address = _pick(row, "printSt", "rprsAdongNm", "adongNm")
+        else:
+            address = ""
 
         if not address:
             st.warning("주소를 찾을 수 없습니다.")
         else:
-            # ── 경매 정보 표시 ──
+            # ── 경매 정보 ──
             if row:
                 st.markdown("### 📋 경매 정보")
                 cs = _pick(row, "srnSaNo", "userCsNo", "csNo")
                 court = _pick(row, "jiwonNm", "cortOfcNm")
-                try:
-                    appr = int(float(str(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)))
-                except:
-                    appr = 0
-                try:
-                    low = int(float(str(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)))
-                except:
-                    low = 0
-                try:
-                    fail = int(float(str(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)))
-                except:
-                    fail = 0
+                appr = safe_int(row.get("gamevalAmt") or row.get("aeeEvlAmt") or 0)
+                low = safe_int(row.get("minmaePrice") or row.get("lwsDspslPrc") or 0)
+                fail = safe_int(row.get("yuchalCnt") or row.get("flbdNcnt") or 0)
                 sale_date = _pick(row, "maeGiil", "dspslDxdyYmd")
-                try:
-                    rate = int(float(str(row.get("notifyMinmaePriceRate1") or row.get("lwsDspslPrcRate") or 0)))
-                except:
-                    rate = 0
+                rate = safe_int(row.get("notifyMinmaePriceRate1") or row.get("lwsDspslPrcRate") or 0)
                 deposit = int(low * 0.1) if low else 0
+
                 ac1, ac2, ac3, ac4 = st.columns(4)
                 ac1.metric("감정가", fmt_price(appr))
                 ac2.metric("최저가", fmt_price(low))
@@ -461,7 +425,6 @@ with tab2:
 
             if not pnu:
                 st.error(f"❌ PNU를 찾을 수 없습니다: {address}")
-                st.json(geo)
             else:
                 st.caption(f"PNU: {pnu} · 좌표: {lat}, {lon}")
 
@@ -474,9 +437,10 @@ with tab2:
                 # ── 토지 정보 ──
                 st.markdown("### 📐 토지 정보")
                 if land:
+                    area = float(land.get("lndpclAr", 0) or 0)
+                    jiga = int(float(land.get("pblntfPclnd", 0) or 0))
+
                     lc1, lc2, lc3 = st.columns(3)
-                    area = float(land.get("lndpclAr", 0))
-                    jiga = int(land.get("pblntfPclnd", 0))
                     lc1.metric("지목", land.get("lndcgrCodeNm", "-"))
                     lc2.metric("면적", f"{area:,.1f}㎡ ({area/3.3058:.1f}평)" if area else "-")
                     lc3.metric("용도지역", land.get("prposArea1Nm", "-"))
@@ -486,7 +450,6 @@ with tab2:
                     lc5.metric("도로접면", land.get("roadSideCodeNm", "-"))
                     lc6.metric("이용상황", land.get("ladUseSittnNm", "-"))
 
-                    # 공시지가 총액 vs 감정가
                     if jiga > 0 and area > 0:
                         total_jiga = int(jiga * area)
                         st.info(f"📌 공시지가 총액: **{fmt_price(total_jiga)}** · 기준연도: {land.get('stdrYear', '-')}년")
@@ -494,18 +457,22 @@ with tab2:
                             ratio = appr / total_jiga * 100 if total_jiga > 0 else 0
                             st.info(f"📌 감정가 / 공시지가 총액: **{ratio:.1f}%**")
 
-                    # 규제 체크
                     checks = []
                     yongdo = land.get("prposArea1Nm", "")
                     jimok = land.get("lndcgrCodeNm", "")
                     road = land.get("roadSideCodeNm", "")
-                    if "농림" in yongdo: checks.append("⚠️ 농림지역 — 농지전용 필요")
-                    if "보전" in yongdo: checks.append("⚠️ 보전지역 — 개발제한")
-                    if jimok in ("전", "답", "과수원"): checks.append("ℹ️ 농취증 필요")
-                    if jimok == "임야": checks.append("ℹ️ 산지관리법 적용")
-                    if "맹지" in road or road == "": checks.append("⚠️ 도로 접면 확인 필요")
-                    if "계획관리" in yongdo: checks.append("✅ 계획관리지역 — 개발 가능성 양호")
-
+                    if "농림" in yongdo:
+                        checks.append("⚠️ 농림지역 — 농지전용 필요")
+                    if "보전" in yongdo:
+                        checks.append("⚠️ 보전지역 — 개발제한")
+                    if jimok in ("전", "답", "과수원"):
+                        checks.append("ℹ️ 농취증 필요")
+                    if jimok == "임야":
+                        checks.append("ℹ️ 산지관리법 적용")
+                    if "맹지" in road or road == "":
+                        checks.append("⚠️ 도로 접면 확인 필요")
+                    if "계획관리" in yongdo:
+                        checks.append("✅ 계획관리지역 — 개발 가능성 양호")
                     if checks:
                         st.markdown("**⚠️ 규제 체크리스트**")
                         for c in checks:
@@ -525,15 +492,15 @@ with tab2:
                         bc4, bc5, bc6 = st.columns(3)
                         bc4.metric("층수", f"지상{b.get('grndFlrCnt', 0)} / 지하{b.get('ugrndFlrCnt', 0)}")
                         use_apr = str(b.get("useAprDay", ""))
-                        bc5.metric("사용승인", fmt_date(use_apr) if len(use_apr) == 8 else use_apr or "-")
+                        bc5.metric("사용승인", fmt_date(use_apr))
                         bc6.metric("건물명", b.get("bldNm", "-") or "-")
                 else:
                     st.info("🏗️ 건축물대장에 등록된 건물 없음 — **나지(裸地)**로 판단")
 
                 # ── 실거래가 ──
                 st.markdown("### 📈 주변 실거래가 (최근 6개월)")
+                avg_p = 0
                 if trades:
-                    # 같은 읍면동 필터
                     addr_parts = address.split()
                     umd = ""
                     for p in addr_parts:
@@ -542,31 +509,30 @@ with tab2:
                             break
 
                     same_umd = [t for t in trades if umd and t.get("umdNm") and umd in t["umdNm"]] if umd else []
+                    prices_per_pyeong = []
 
                     if same_umd:
-                        prices_per_pyeong = []
                         for t in same_umd:
-                            amt = int(str(t.get("dealAmount", "0")).replace(",", "")) * 10000
-                            area_t = float(t.get("dealArea", 0))
+                            amt = safe_int(str(t.get("dealAmount", "0")).replace(",", "")) * 10000
+                            area_t = float(t.get("dealArea", 0) or 0)
                             if area_t > 0:
                                 prices_per_pyeong.append(int(amt / area_t * 3.3058))
 
                         if prices_per_pyeong:
                             avg_p = sum(prices_per_pyeong) // len(prices_per_pyeong)
-                            min_p = min(prices_per_pyeong)
-                            max_p = max(prices_per_pyeong)
+                            min_pp = min(prices_per_pyeong)
+                            max_pp = max(prices_per_pyeong)
 
                             tc1, tc2, tc3, tc4 = st.columns(4)
                             tc1.metric(f"{umd} 거래", f"{len(same_umd)}건")
                             tc2.metric("평균", f"{avg_p:,}원/평")
-                            tc3.metric("최저", f"{min_p:,}원/평")
-                            tc4.metric("최고", f"{max_p:,}원/평")
+                            tc3.metric("최저", f"{min_pp:,}원/평")
+                            tc4.metric("최고", f"{max_pp:,}원/평")
 
-                    # 테이블
                     trade_display = []
                     for t in trades[:20]:
-                        amt = int(str(t.get("dealAmount", "0")).replace(",", "")) * 10000
-                        area_t = float(t.get("dealArea", 0))
+                        amt = safe_int(str(t.get("dealAmount", "0")).replace(",", "")) * 10000
+                        area_t = float(t.get("dealArea", 0) or 0)
                         pp = int(amt / area_t * 3.3058) if area_t > 0 else 0
                         trade_display.append({
                             "거래일": f"{t.get('dealYear', '')}.{str(t.get('dealMonth', '')).zfill(2)}.{str(t.get('dealDay', '')).zfill(2)}",
@@ -582,18 +548,19 @@ with tab2:
                 else:
                     st.info("최근 6개월 실거래 내역 없음")
 
-                # ── 투자분석 요약 ──
-                if row and low and area:
-                    st.markdown("### 💰 투자 분석 요약")
-                    pp_low = int(low / (area / 3.3058)) if area > 0 else 0
+                # ── 투자분석 ──
+                if row:
+                    if low and area:
+                        st.markdown("### 💰 투자 분석 요약")
+                        pp_low = int(low / (area / 3.3058)) if area > 0 else 0
 
-                    ic1, ic2, ic3 = st.columns(3)
-                    ic1.metric("최저가 평단가", f"{pp_low:,}원/평" if pp_low else "-")
-                    if jiga > 0:
-                        ic2.metric("최저가/공시지가", f"{low / (jiga * area) * 100:.1f}%" if area > 0 else "-")
-                    if same_umd and prices_per_pyeong:
-                        diff = ((pp_low - avg_p) / avg_p * 100)
-                        ic3.metric("실거래 평균 대비", f"{diff:+.1f}%", delta=f"{diff:+.1f}%")
+                        ic1, ic2, ic3 = st.columns(3)
+                        ic1.metric("최저가 평단가", f"{pp_low:,}원/평" if pp_low else "-")
+                        if jiga > 0 and area > 0:
+                            ic2.metric("최저가/공시지가", f"{low / (jiga * area) * 100:.1f}%")
+                        if avg_p > 0 and pp_low > 0:
+                            diff = ((pp_low - avg_p) / avg_p * 100)
+                            ic3.metric("실거래 평균 대비", f"{diff:+.1f}%")
 
                     st.markdown("**⚠️ 현장 확인 체크리스트**")
                     st.markdown("""
@@ -609,16 +576,14 @@ with tab2:
                 st.divider()
                 bc1, bc2, bc3 = st.columns(3)
                 with bc1:
-                    bid_url = f"https://realty-board.vercel.app/bid-form.html"
-                    st.link_button("📝 입찰 신청서 보내기", bid_url)
+                    st.link_button("📝 입찰 신청서 보내기", "https://realty-board.vercel.app/bid-form.html")
                 with bc2:
-                    sheet_url = f"https://realty-board.vercel.app/bid-sheet.html"
-                    st.link_button("📄 기일입찰표 작성", sheet_url)
+                    st.link_button("📄 기일입찰표 작성", "https://realty-board.vercel.app/bid-sheet.html")
                 with bc3:
-                    form_url = f"https://realty-board.vercel.app/auction-form.html"
-                    st.link_button("📋 매수신청대상물 확인설명서", form_url)
+                    st.link_button("📋 확인설명서", "https://realty-board.vercel.app/auction-form.html")
     else:
         st.info("🔍 검색 탭에서 물건을 선택하거나, 위에 주소를 입력하세요.")
+
 
 # ═══════════════════════════════════════════
 # 탭 3: 관심물건
@@ -632,15 +597,17 @@ with tab3:
         st.info("검색 탭에서 물건을 선택 후 '⭐ 관심물건 등록' 버튼을 눌러주세요.")
     else:
         for i, item in enumerate(watchlist):
-            sale_ymd = item.get("saleDate", "")
-            if sale_ymd and len(str(sale_ymd)) == 8:
-                sale_date_obj = date(int(str(sale_ymd)[:4]), int(str(sale_ymd)[4:6]), int(str(sale_ymd)[6:]))
-                d_day = (sale_date_obj - date.today()).days
-                d_day_str = f"D-{d_day}" if d_day > 0 else ("D-Day" if d_day == 0 else f"D+{abs(d_day)}")
-                urgent = "🔴" if d_day <= 3 else ("🟡" if d_day <= 7 else "🟢")
-            else:
-                d_day_str = "-"
-                urgent = "⚪"
+            sale = item.get("saleDate", "")
+            d_day_str = "-"
+            urgent = "⚪"
+            if sale and len(str(sale)) == 8:
+                try:
+                    sale_date_obj = date(int(str(sale)[:4]), int(str(sale)[4:6]), int(str(sale)[6:]))
+                    d_day = (sale_date_obj - date.today()).days
+                    d_day_str = f"D-{d_day}" if d_day > 0 else ("D-Day" if d_day == 0 else f"D+{abs(d_day)}")
+                    urgent = "🔴" if d_day <= 3 else ("🟡" if d_day <= 7 else "🟢")
+                except:
+                    pass
 
             with st.expander(f"{urgent} {item['caseNo']} — {item['address']} | {fmt_price(item['minPrice'])} | {d_day_str}", expanded=False):
                 wc1, wc2, wc3, wc4 = st.columns(4)
@@ -662,11 +629,11 @@ with tab3:
                     if st.button("📊 종합분석", key=f"analyze_{i}"):
                         st.session_state.selected_row = item.get("raw", {})
                         st.info("📊 종합분석 탭을 확인하세요.")
-                        st.json(row)  # 디버그: 행 데이터 확인용
                 with mc2:
                     if st.button("🗑️ 삭제", key=f"delete_{i}"):
                         st.session_state.watchlist.pop(i)
                         st.rerun()
+
 
 # ═══════════════════════════════════════════
 # 탭 4: 의뢰인 관리
@@ -682,18 +649,17 @@ with tab4:
         if not items:
             st.info("접수된 의뢰인이 없습니다.")
         else:
-            for item in items:
+            for ni, item in enumerate(items):
                 bid_type_icon = "🏢" if item.get("bidType") == "법인" else "👤"
                 sale = item.get("saleDate", "")
+                d_str = "-"
                 if sale:
                     try:
                         sd_obj = date.fromisoformat(sale)
                         d = (sd_obj - date.today()).days
                         d_str = f"D-{d}" if d > 0 else ("D-Day" if d == 0 else f"D+{abs(d)}")
                     except:
-                        d_str = "-"
-                else:
-                    d_str = "-"
+                        pass
 
                 with st.expander(f"{bid_type_icon} {item.get('caseNo', '-')} | {item.get('name', '-')} | {item.get('court', '-')} | {d_str}"):
                     nc1, nc2, nc3, nc4 = st.columns(4)
@@ -723,34 +689,31 @@ with tab4:
     except Exception as e:
         st.error(f"노션 연동 실패: {e}")
 
+
 # ═══════════════════════════════════════════
 # 탭 5: 입찰 일정
 # ═══════════════════════════════════════════
 with tab5:
     st.subheader("📅 입찰 일정 대시보드")
 
-    # 관심물건 + 의뢰인 합쳐서 일정 표시
     all_schedule = []
 
-    # 관심물건
     for item in st.session_state.watchlist:
         sale = item.get("saleDate", "")
-        if sale and len(str(sale)) == 8:
-            all_schedule.append({
-                "유형": "⭐ 관심",
-                "사건번호": item.get("caseNo", "-"),
-                "소재지": item.get("address", "-"),
-                "금액": fmt_price(item.get("minPrice", 0)),
-                "매각기일": fmt_date(sale),
-                "상태": item.get("status", "-"),
-                "_sort": str(sale)
-            })
+        all_schedule.append({
+            "유형": "⭐ 관심",
+            "사건번호": item.get("caseNo", "-"),
+            "소재지": item.get("address", "-"),
+            "금액": fmt_price(item.get("minPrice", 0)),
+            "매각기일": fmt_date(sale),
+            "상태": item.get("status", "-"),
+            "_sort": str(sale) if sale else "99999999"
+        })
 
-    # 의뢰인
     try:
-        notion_res = requests.get(f"{VERCEL_BASE}/notion-bid-list", timeout=10)
-        notion_items = notion_res.json().get("items") or []
-        for item in notion_items:
+        notion_res2 = requests.get(f"{VERCEL_BASE}/notion-bid-list", timeout=10)
+        notion_items2 = notion_res2.json().get("items") or []
+        for item in notion_items2:
             sale = item.get("saleDate", "")
             all_schedule.append({
                 "유형": "👥 의뢰",
@@ -766,8 +729,7 @@ with tab5:
 
     if all_schedule:
         all_schedule.sort(key=lambda x: x.get("_sort", "99999999"))
-        df_schedule = pd.DataFrame(all_schedule)
-        df_schedule = df_schedule.drop(columns=["_sort"])
+        df_schedule = pd.DataFrame(all_schedule).drop(columns=["_sort"])
         st.dataframe(df_schedule, use_container_width=True, hide_index=True)
     else:
         st.info("관심물건 등록 또는 의뢰인 접수가 없습니다.")
