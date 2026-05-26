@@ -2357,7 +2357,6 @@ def main():
             ddxdy = fetch_dxdy(cs_b, cort)
             ddlvr = fetch_dlvr(cs_b, cort)
             dcurst = fetch_curst(cs_b, cort)
-          st.session_state["_search_row"] = row
         render_detail(db, da, ddxdy, ddlvr, dcurst)
         return
 
