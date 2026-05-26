@@ -1870,9 +1870,13 @@ def render_detail(db, da, ddxdy, ddlvr, dcurst):
                 if v_jiga > 0 and v_area > 0:
                     total_jiga = int(v_jiga * v_area)
                     st.info(f"공시지가 총액: **{total_jiga:,}원** ({fmt_krw(total_jiga)})")
-                    if aee_won:
-                        ratio = aee_won / total_jiga * 100
-                        st.info(f"감정가 / 공시지가 총액: **{ratio:.1f}%**")
+                    try:
+                        if aee_evl:
+                            aee_w = int(str(aee_evl).replace(",", ""))
+                            ratio = aee_w / total_jiga * 100
+                            st.info(f"감정가 / 공시지가 총액: **{ratio:.1f}%**")
+                    except:
+                        pass
                 yongdo = v_land.get("prposArea1Nm", "")
                 jimok = v_land.get("lndcgrCodeNm", "")
                 road = v_land.get("roadSideCodeNm", "")
