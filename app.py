@@ -1844,69 +1844,95 @@ def render_detail(db, da, ddxdy, ddlvr, dcurst):
         if not shown:
             md("<div class='nodata'>문건/송달 데이터 없음</div>")
 
+    # ── 탭6: 시세분석 (국토부 실거래가 + 원/평 단가 비교, 누적·엑셀) ──
+    with tabs[5]:
         # ── 토지정보 (Vercel API) ──
         addr_for_geo = addrs[0] if addrs else ""
+        v_land = {}
+        v_bldg = []
+        v_jiga = 0
+        v_area = 0.0
         if addr_for_geo:
             with st.spinner("토지특성 조회 중 (VWorld)..."):
                 geo = vercel_geocode(addr_for_geo)
                 v_pnu = geo.get("pnu")
-                v_land = vercel_land(v_pnu) if v_pnu else {}
-                v_bldg = vercel_building(v_pnu) if v_pnu else []
+                if v_pnu:
+                    v_land = vercel_land(v_pnu)
+                    v_bldg = vercel_building(v_pnu)
+
             if v_land:
-                md("<div class='sec'>📐 토지특성 (VWorld)</div>")
+                md("<div class='sec'>📐 토지 기본정보</div>")
                 v_area = float(v_land.get("lndpclAr", 0) or 0)
                 v_jiga = int(float(v_land.get("pblntfPclnd", 0) or 0))
-                land_rows = "<table class='kv'>"
-                land_rows += f"<tr><th>PNU</th><td>{v_pnu or '-'}</td></tr>"
-                land_rows += f"<tr><th>지목</th><td>{v_land.get('lndcgrCodeNm', '-')}</td></tr>"
-                land_rows += f"<tr><th>면적</th><td>{v_area:,.1f}㎡ ({v_area/3.3058:.1f}평)</td></tr>"
-                land_rows += f"<tr><th>용도지역</th><td>{v_land.get('prposArea1Nm', '-')}</td></tr>"
-                land_rows += f"<tr><th>이용상황</th><td>{v_land.get('ladUseSittnNm', '-')}</td></tr>"
-                land_rows += f"<tr><th>도로접면</th><td>{v_land.get('roadSideCodeNm', '-')}</td></tr>"
-                land_rows += f"<tr><th>지형</th><td>{v_land.get('tpgrphHgCodeNm', '-')} / {v_land.get('tpgrphFrmCodeNm', '-')}</td></tr>"
-                land_rows += f"<tr><th>공시지가</th><td>{v_jiga:,}원/㎡ ({v_land.get('stdrYear', '')}년)</td></tr>"
-                land_rows += "</table>"
-                md(land_rows)
-                if v_jiga > 0 and v_area > 0:
-                    total_jiga = int(v_jiga * v_area)
-                    st.info(f"공시지가 총액: **{total_jiga:,}원** ({fmt_krw(total_jiga)})")
-                    try:
-                        if aee_evl:
-                            aee_w = int(str(aee_evl).replace(",", ""))
-                            ratio = aee_w / total_jiga * 100
-                            st.info(f"감정가 / 공시지가 총액: **{ratio:.1f}%**")
-                    except:
-                        pass
+                v_pyeong = round(v_area / 3.3058, 2) if v_area else 0
+                jiga_total = int(v_jiga * v_area) if v_jiga and v_area else 0
+                jiga_py = round(v_jiga * 3.3058) if v_jiga else 0
+
+                t = "<table class='kv'>"
+                t += f"<tr><th>소재지</th><td>{addr_for_geo}</td></tr>"
+                t += f"<tr><th>지목</th><td>{v_land.get('lndcgrCodeNm', '-')}</td></tr>"
+                t += f"<tr><th>면적</th><td>{v_area:,.1f}㎡ ({v_pyeong:,.2f}평)</td></tr>"
+                t += f"<tr><th>용도지역</th><td><b>{v_land.get('prposArea1Nm', '-')}</b></td></tr>"
+                t += f"<tr><th>이용상황</th><td>{v_land.get('ladUseSittnNm', '-')}</td></tr>"
+                t += f"<tr><th>도로접면</th><td>{v_land.get('roadSideCodeNm', '-')}</td></tr>"
+                t += f"<tr><th>지형높이</th><td>{v_land.get('tpgrphHgCodeNm', '-')}</td></tr>"
+                t += f"<tr><th>지형형상</th><td>{v_land.get('tpgrphFrmCodeNm', '-')}</td></tr>"
+                t += f"<tr><th>공시지가(㎡)</th><td><b>{v_jiga:,}원/㎡</b> ({v_land.get('stdrYear', '')}년)</td></tr>"
+                t += f"<tr><th>공시지가(평)</th><td>{jiga_py:,}원/평</td></tr>"
+                t += f"<tr><th>공시지가 총액</th><td><b>{jiga_total:,}원</b> ({fmt_krw(jiga_total)})</td></tr>"
+                t += "</table>"
+                md(t)
+
+                # 감정가 대비
+                try:
+                    aee_w = int(str(aee_evl).replace(",", "")) if aee_evl else 0
+                except:
+                    aee_w = 0
+                if aee_w and jiga_total:
+                    ratio = aee_w / jiga_total * 100
+                    if ratio > 100:
+                        st.success(f"📌 감정가가 공시지가 총액의 **{ratio:.1f}%** (공시지가 대비 높게 평가)")
+                    else:
+                        st.info(f"📌 감정가가 공시지가 총액의 **{ratio:.1f}%**")
+
+                # 규제 체크리스트
+                md("<div class='sec'>⚠️ 규제 체크리스트</div>")
                 yongdo = v_land.get("prposArea1Nm", "")
                 jimok = v_land.get("lndcgrCodeNm", "")
                 road = v_land.get("roadSideCodeNm", "")
+                usage = v_land.get("ladUseSittnNm", "")
                 checks = []
-                if "농림" in yongdo: checks.append("⚠️ 농림지역 — 농지전용 필요")
-                if "보전" in yongdo: checks.append("⚠️ 보전지역 — 개발제한")
-                if jimok in ("전", "답", "과수원"): checks.append("ℹ️ 농취증 필요")
-                if jimok == "임야": checks.append("ℹ️ 산지관리법 적용")
-                if "맹지" in road: checks.append("⚠️ 맹지 — 진입로 확보 필수")
-                if "계획관리" in yongdo: checks.append("✅ 계획관리지역 — 개발 가능성 양호")
-                if checks:
-                    st.markdown("**규제 체크리스트**")
-                    for c in checks:
-                        st.markdown(f"- {c}")
+                if "농림" in yongdo: checks.append(("⚠️", "농림지역 — 농지전용허가 필요, 농업진흥구역 확인"))
+                if "보전관리" in yongdo: checks.append(("⚠️", "보전관리지역 — 개발행위 제한 강함"))
+                if "보전녹지" in yongdo or "자연환경보전" in yongdo: checks.append(("⚠️", "보전계열 — 개발 극히 제한"))
+                if "계획관리" in yongdo: checks.append(("✅", "계획관리지역 — 개발 가능성 상대적으로 양호"))
+                if "생산관리" in yongdo: checks.append(("ℹ️", "생산관리지역 — 행위제한 중간"))
+                if jimok in ("전", "답", "과수원"): checks.append(("⚠️", f"지목 {jimok} — 농지취득자격증명(농취증) 필요"))
+                if jimok == "임야": checks.append(("⚠️", "지목 임야 — 산지관리법 적용, 보전산지/준보전산지 확인"))
+                if "맹지" in road: checks.append(("🔴", "맹지 — 진입로 확보·사도 개설 검토 필수"))
+                if road and "맹지" not in road and "없" not in road: checks.append(("✅", f"도로접면: {road}"))
+                if not checks: checks.append(("ℹ️", "특이 규제 징후 없음 — 토지이음·현장 확인 별도 권장"))
+                for icon, txt in checks:
+                    st.markdown(f"- {icon} {txt}")
+
+            # 건축물대장
             if v_bldg:
                 md("<div class='sec'>🏢 건축물대장</div>")
-                for b in v_bldg[:3]:
-                    bld_r = "<table class='kv'>"
-                    bld_r += f"<tr><th>용도</th><td>{b.get('mainPurpsCdNm', '-')}</td></tr>"
-                    bld_r += f"<tr><th>구조</th><td>{b.get('strctCdNm', '-')}</td></tr>"
-                    bld_r += f"<tr><th>연면적</th><td>{float(b.get('totArea', 0)):,.1f}㎡</td></tr>"
-                    bld_r += f"<tr><th>층수</th><td>지상{b.get('grndFlrCnt', 0)} / 지하{b.get('ugrndFlrCnt', 0)}</td></tr>"
-                    bld_r += f"<tr><th>사용승인</th><td>{_d(b.get('useAprDay', ''))}</td></tr>"
-                    bld_r += "</table>"
-                    md(bld_r)
-            elif v_pnu:
-                st.info("건축물대장에 등록된 건물 없음 — 나지")
-        st.divider()
-    # ── 탭6: 시세분석 (국토부 실거래가 + 원/평 단가 비교, 누적·엑셀) ──
-    with tabs[5]:
+                for b in v_bldg[:5]:
+                    t = "<table class='kv'>"
+                    t += f"<tr><th>건물명</th><td>{b.get('bldNm', '-') or '-'}</td></tr>"
+                    t += f"<tr><th>주용도</th><td>{b.get('mainPurpsCdNm', '-')}</td></tr>"
+                    t += f"<tr><th>구조</th><td>{b.get('strctCdNm', '-')}</td></tr>"
+                    t += f"<tr><th>연면적</th><td>{float(b.get('totArea', 0)):,.1f}㎡</td></tr>"
+                    t += f"<tr><th>층수</th><td>지상 {b.get('grndFlrCnt', 0)}층 / 지하 {b.get('ugrndFlrCnt', 0)}층</td></tr>"
+                    t += f"<tr><th>사용승인</th><td>{_d(b.get('useAprDay', ''))}</td></tr>"
+                    t += "</table>"
+                    md(t)
+            elif v_land:
+                st.info("🏗️ 건축물대장에 등록된 건물 없음 — 나지(裸地)로 판단")
+
+            st.divider()
+
         md("<div class='sec'>시세분석 — 원/평 단가 비교</div>")
         area = auction_area_m2(db)
         bld_nm = auction_bldnm(db)
@@ -2088,9 +2114,8 @@ def render_watchlist():
         d_str, urg = "-", "⚪"
         if sale and len(str(sale)) == 8:
             try:
-                from datetime import date as _date
-                sd = _date(int(str(sale)[:4]), int(str(sale)[4:6]), int(str(sale)[6:]))
-                d = (sd - _date.today()).days
+                sd = date(int(str(sale)[:4]), int(str(sale)[4:6]), int(str(sale)[6:]))
+                d = (sd - date.today()).days
                 d_str = f"D-{d}" if d > 0 else ("D-Day" if d == 0 else f"D+{abs(d)}")
                 urg = "🔴" if d <= 3 else ("🟡" if d <= 7 else "🟢")
             except: pass
@@ -2106,6 +2131,7 @@ def render_watchlist():
             if st.button("🗑️ 삭제", key=f"wd_{i}"):
                 st.session_state["watchlist"].pop(i); st.rerun()
 
+
 def render_clients():
     st.subheader("👥 의뢰인 접수 현황")
     try:
@@ -2119,8 +2145,7 @@ def render_clients():
             d_str = "-"
             if sale:
                 try:
-                    from datetime import date as _date
-                    sd = _date.fromisoformat(sale); d = (sd - _date.today()).days
+                    sd = date.fromisoformat(sale); d = (sd - date.today()).days
                     d_str = f"D-{d}" if d > 0 else ("D-Day" if d == 0 else f"D+{abs(d)}")
                 except: pass
             with st.expander(f"{icon} {item.get('caseNo','-')} | {item.get('name','-')} | {item.get('court','-')} | {d_str}"):
@@ -2133,14 +2158,14 @@ def render_clients():
                 if item.get("bidType") == "법인":
                     st.text(f"회사: {item.get('company','-')} | 사업자: {item.get('bizNo','-')}")
                 dc1, dc2 = st.columns(2)
-                with dc1: st.link_button("📄 입찰표 작성", "https://realty-board.vercel.app/bid-sheet.html")
+                with dc1: st.link_button("📄 입찰표", "https://realty-board.vercel.app/bid-sheet.html")
                 with dc2: st.link_button("📋 확인설명서", "https://realty-board.vercel.app/auction-form.html")
     except Exception as e:
         st.error(f"노션 연동 실패: {e}")
 
+
 def render_schedule():
     st.subheader("📅 입찰 일정 대시보드")
-    from datetime import date as _date
     schedule = []
     for item in st.session_state.get("watchlist", []):
         schedule.append({"유형":"⭐관심","사건번호":item.get("caseNo","-"),
@@ -2163,6 +2188,7 @@ def render_schedule():
         st.dataframe(df, use_container_width=True, hide_index=True)
     else:
         st.info("관심물건 등록 또는 의뢰인 접수가 없습니다.")
+
 
 def main():
     st.set_page_config(page_title="경매정보 검색 시스템", page_icon="🏛️",
