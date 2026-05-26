@@ -289,6 +289,26 @@ def vercel_building(pnu):
     except:
         return []
 
+def vercel_realtrade(lawd_cd, months=6):
+    """Vercel 실거래 API로 최근 N개월 토지 거래 조회"""
+    from datetime import date as _date
+    all_trades = []
+    now = _date.today()
+    for m in range(months):
+        y = now.year
+        mo = now.month - m
+        while mo <= 0:
+            mo += 12; y -= 1
+        ym = f"{y}{mo:02d}"
+        try:
+            r = requests.get(f"{VERCEL_BASE}/realtrade?lawdCd={lawd_cd}&dealYmd={ym}", timeout=15)
+            data = r.json()
+            items = data.get("items") or []
+            all_trades.extend(items)
+        except:
+            pass
+    return all_trades
+
 def _post(url, payload, hdr=None, timeout=12):
     try:
         r = requests.post(url, headers=hdr or H_BASE, json=payload, timeout=timeout)
@@ -1930,6 +1950,100 @@ def render_detail(db, da, ddxdy, ddlvr, dcurst):
                     md(t)
             elif v_land:
                 st.info("🏗️ 건축물대장에 등록된 건물 없음 — 나지(裸地)로 판단")
+
+            st.divider()
+
+        # ── 인근 유사 토지 실거래 (Vercel API, 자동 필터링) ──
+        if addr_for_geo and v_land:
+            md("<div class='sec'>📈 인근 유사 토지 실거래</div>")
+            v_yongdo = v_land.get("prposArea1Nm", "")
+            v_jimok = v_land.get("lndcgrCodeNm", "")
+            lawd5 = v_pnu[:5] if v_pnu else ""
+
+            if lawd5:
+                with st.spinner("인근 실거래 조회 중 (최근 6개월)..."):
+                    raw_trades = vercel_realtrade(lawd5, months=6)
+
+                if raw_trades:
+                    # 필터: 같은 읍면동 + 토지 거래만
+                    addr_parts = addr_for_geo.split()
+                    umd = ""
+                    for ap in addr_parts:
+                        if ap.endswith(("읍", "면", "동", "리")):
+                            umd = ap; break
+
+                    filtered = []
+                    for t in raw_trades:
+                        t_umd = t.get("umdNm", "")
+                        t_area = float(t.get("dealArea", 0) or 0)
+                        t_amt_raw = str(t.get("dealAmount", "0")).replace(",", "").strip()
+                        try:
+                            t_amt = int(t_amt_raw) * 10000
+                        except:
+                            continue
+                        if t_area <= 0 or t_amt <= 0:
+                            continue
+                        pp = int(t_amt / t_area * 3.3058)
+                        pp_m2 = int(t_amt / t_area)
+                        filtered.append({
+                            "거래일": f"{t.get('dealYear','')}.{str(t.get('dealMonth','')).zfill(2)}",
+                            "읍면동": t_umd,
+                            "지목": t.get("jimok", ""),
+                            "면적(㎡)": f"{t_area:,.1f}",
+                            "면적(평)": f"{t_area/3.3058:,.1f}",
+                            "거래가": fmt_krw(t_amt),
+                            "단가(원/㎡)": f"{pp_m2:,}",
+                            "단가(원/평)": f"{pp:,}",
+                            "_umd": t_umd,
+                            "_pp": pp,
+                        })
+
+                    # 같은 읍면동 우선, 없으면 전체
+                    same_umd = [t for t in filtered if umd and umd in t["_umd"]]
+                    display_list = same_umd if same_umd else filtered
+
+                    if display_list:
+                        # 통계
+                        pps = [t["_pp"] for t in display_list if t["_pp"] > 0]
+                        if pps:
+                            avg_pp = sum(pps) // len(pps)
+                            min_pp = min(pps)
+                            max_pp = max(pps)
+                            scope = f"같은 읍면동({umd})" if same_umd else "같은 시군구"
+
+                            tc1, tc2, tc3, tc4 = st.columns(4)
+                            tc1.metric(f"{scope} 거래", f"{len(display_list)}건")
+                            tc2.metric("평균 단가", f"{avg_pp:,}원/평")
+                            tc3.metric("최저", f"{min_pp:,}원/평")
+                            tc4.metric("최고", f"{max_pp:,}원/평")
+
+                            # 감정가/최저가 대비
+                            try:
+                                aee_w2 = int(str(aee_evl).replace(",", "")) if aee_evl else 0
+                            except:
+                                aee_w2 = 0
+                            try:
+                                lws_w2 = int(str(lws_prc).replace(",", "")) if lws_prc else 0
+                            except:
+                                lws_w2 = 0
+
+                            if v_area > 0 and avg_pp > 0:
+                                if lws_w2:
+                                    lws_pp = int(lws_w2 / (v_area / 3.3058))
+                                    diff = ((lws_pp - avg_pp) / avg_pp * 100)
+                                    if diff < 0:
+                                        st.success(f"📌 최저가 평단가 **{lws_pp:,}원/평** → 실거래 평균 대비 **{diff:+.1f}%** (저렴)")
+                                    else:
+                                        st.warning(f"📌 최저가 평단가 **{lws_pp:,}원/평** → 실거래 평균 대비 **{diff:+.1f}%** (비쌈)")
+
+                        # 테이블
+                        df_rt = pd.DataFrame(display_list)
+                        df_rt = df_rt.drop(columns=["_umd", "_pp"])
+                        st.dataframe(df_rt, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("필터 조건에 맞는 실거래 내역 없음")
+                else:
+                    st.info("최근 6개월 실거래 내역 없음")
 
             st.divider()
 
