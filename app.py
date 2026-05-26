@@ -1961,8 +1961,8 @@ def render_detail(db, da, ddxdy, ddlvr, dcurst):
             lawd5 = v_pnu[:5] if v_pnu else ""
 
             if lawd5:
-                with st.spinner("인근 실거래 조회 중 (최근 6개월)..."):
-                    raw_trades = vercel_realtrade(lawd5, months=6)
+                with st.spinner("인근 실거래 조회 중 (최근 24개월)..."):
+                    raw_trades = vercel_realtrade(lawd5, months=24)
 
                 if raw_trades:
                     # 필터: 같은 읍면동 + 토지 거래만
@@ -2357,6 +2357,7 @@ def main():
             ddxdy = fetch_dxdy(cs_b, cort)
             ddlvr = fetch_dlvr(cs_b, cort)
             dcurst = fetch_curst(cs_b, cort)
+          st.session_state["_search_row"] = row
         render_detail(db, da, ddxdy, ddlvr, dcurst)
         return
 
