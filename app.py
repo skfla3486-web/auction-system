@@ -1689,52 +1689,10 @@ def main():
 
     # 상세
     if "detail" in st.session_state:
-        bk, _, b1, b2, b3 = st.columns([1, 3, 1, 1, 1])
-        if bk.button("← 목록으로", use_container_width=True):
+        bk_col, _ = st.columns([1, 7])
+        if bk_col.button("← 목록으로", use_container_width=True):
             del st.session_state["detail"]
             st.rerun()
-
-        # 서류 버튼용 데이터 추출
-        _row = st.session_state["detail"]
-        _cs_no = _p(_row, "srnSaNo", "userCsNo", "csNo", default="")
-        _court = _p(_row, "jiwonNm", "cortOfcNm", default="")
-        _mae_giil = _p(_row, "maeGiil", "dspslDxdyYmd", default="")
-        _min_price = _p(_row, "minmaePrice", "lwsDspslPrc", default="")
-        _appraisal = _p(_row, "gamevalAmt", "aeeEvlAmt", default="")
-        _mae_hh = _p(_row, "maeHh1", default="")
-        _mul_ser = _p(_row, "maemulSer", "dspslGdsSeq", default="1")
-
-        # 보증금 = 최저가 × 10%
-        try:
-            _deposit = str(int(int(str(_min_price).replace(",", "")) * 0.1))
-        except:
-            _deposit = ""
-
-        # 매각기일 → YYYY-MM-DD 변환
-        _sale_iso = ""
-        if _mae_giil and len(str(_mae_giil)) == 8:
-            _sale_iso = f"{str(_mae_giil)[:4]}-{str(_mae_giil)[4:6]}-{str(_mae_giil)[6:]}"
-
-        import urllib.parse
-        _bid_params = urllib.parse.urlencode({
-            "caseNo": _cs_no,
-            "mulSer": _mul_ser,
-            "court": _court,
-            "saleDate": _sale_iso,
-            "time": _mae_hh,
-            "appraisal": _appraisal,
-            "minPrice": _min_price,
-            "deposit": _deposit,
-        })
-
-        with b1:
-            st.link_button("📝 입찰신청서", f"https://realty-board.vercel.app/bid-form.html?{_bid_params}", use_container_width=True)
-        with b2:
-            st.link_button("📄 입찰표", "https://realty-board.vercel.app/bid-sheet.html", use_container_width=True)
-        with b3:
-            st.link_button("📋 확인설명서", "https://realty-board.vercel.app/auction-form.html", use_container_width=True)
-
-        md("<div style='height:8px'></div>")
 
         row = st.session_state["detail"]
         cs_a = _p(row, "userCsNo", "srnSaNo")
@@ -1757,6 +1715,55 @@ def main():
             ddxdy = fetch_dxdy(cs_b, cort)
             ddlvr = fetch_dlvr(cs_b, cort)
             dcurst = fetch_curst(cs_b, cort)
+
+        # 서류 버튼용 데이터 추출
+        _cs_no = _p(row, "srnSaNo", "userCsNo", "csNo", default="")
+        _court = _p(row, "jiwonNm", "cortOfcNm", default="")
+        _mae_giil = _p(row, "maeGiil", "dspslDxdyYmd", default="")
+        _min_price = _p(row, "minmaePrice", "lwsDspslPrc", default="")
+        _appraisal = _p(row, "gamevalAmt", "aeeEvlAmt", default="")
+        _mae_hh = _p(row, "maeHh1", default="")
+        _mul_ser = _p(row, "maemulSer", "dspslGdsSeq", default="1")
+
+        # 사진 URL 추출 (전경도 000241 우선, 없으면 첫 사진)
+        _photo_url = ""
+        _pics = [pp for pp in (db.get("csPicLst") or []) if isinstance(pp, dict)]
+        if _pics:
+            _pri = [pp for pp in _pics if str(pp.get("cortAuctnPicDvsCd") or "") == "000241"]
+            _pp = (_pri or _pics)[0]
+            _u = (_pp.get("picFileUrl") or "").strip()
+            _fn = (_pp.get("picTitlNm") or "").strip()
+            if _u and _fn:
+                _photo_url = (_u if _u.startswith("http") else BASE + _u) + _fn
+
+        # 보증금 = 최저가 × 10%
+        try:
+            _deposit = str(int(int(str(_min_price).replace(",", "")) * 0.1))
+        except Exception:
+            _deposit = ""
+
+        # 매각기일 → YYYY-MM-DD 변환
+        _sale_iso = ""
+        if _mae_giil and len(str(_mae_giil)) == 8:
+            _sale_iso = f"{str(_mae_giil)[:4]}-{str(_mae_giil)[4:6]}-{str(_mae_giil)[6:]}"
+
+        import urllib.parse
+        _bid_params = urllib.parse.urlencode({
+            "caseNo": _cs_no, "mulSer": _mul_ser, "court": _court,
+            "saleDate": _sale_iso, "time": _mae_hh,
+            "appraisal": _appraisal, "minPrice": _min_price, "deposit": _deposit,
+            "photoUrl": _photo_url,
+        })
+
+        _, b1, b2, b3 = st.columns([5, 1, 1, 1])
+        with b1:
+            st.link_button("📝 입찰신청서", f"https://realty-board.vercel.app/bid-form.html?{_bid_params}", use_container_width=True)
+        with b2:
+            st.link_button("📄 입찰표", "https://realty-board.vercel.app/bid-sheet.html", use_container_width=True)
+        with b3:
+            st.link_button("📋 확인설명서", "https://realty-board.vercel.app/auction-form.html", use_container_width=True)
+        md("<div style='height:8px'></div>")
+
         render_detail(db, da, ddxdy, ddlvr, dcurst)
         return
 
